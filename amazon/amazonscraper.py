@@ -59,6 +59,7 @@ def parse_and_save_html(file_path, csv_path):
                     "Image",
                     "Ratings",
                     "Product Reviews Link",
+                    "Reviews",
                 ]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 writer.writeheader()
@@ -81,17 +82,22 @@ def parse_and_save_html(file_path, csv_path):
                         product_ratings.text.strip() if product_ratings else "N/A"
                     )
 
-                    # Write the product data to the CSV
-                    writer.writerow(
-                        {
-                            "Product Name": product_name,
-                            "Price": product_price,
-                            "Link": product_link,
-                            "Image": product_img,
-                            "Ratings": product_ratings,
-                            "Product Reviews Link": f"http://www.amazon.in/product-reviews/{link.split('/')[3]}",
-                        }
+                    # Scrape the Reviews link for the product
+                    reviews_link = (
+                        f"http://www.amazon.in/product-reviews/{link.split('/')[3]}"
                     )
+
+                    # Write the product data to the CSV
+                    # writer.writerow(
+                    #     {
+                    #         "Product Name": product_name,
+                    #         "Price": product_price,
+                    #         "Link": product_link,
+                    #         "Image": product_img,
+                    #         "Ratings": product_ratings,
+                    #         "Product Reviews Link": f"http://www.amazon.in/product-reviews/{link.split('/')[3]}",
+                    #     }
+                    # )
 
             print(f"Top 5 products saved to {csv_path}")
         else:
