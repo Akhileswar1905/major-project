@@ -277,6 +277,11 @@ def scrape_flipkart(search):
 #     scrape_amazon(search)
 #     scrape_flipkart(search)
 
+@app.route("/")
+
+def home():
+    return "Hello, world!"
+
 # Run the app
 if __name__ == "__main__":
     app.run()
