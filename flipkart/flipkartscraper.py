@@ -30,8 +30,8 @@ def fetch_with_selenium(url, path):
 
 
 # Function to parse HTML and save data to a CSV file
-def parse_and_save_html(file_path, csv_path):
-    with open(file_path, "r", encoding="utf-8") as file:
+def parse_and_save_html(path, csv_path):
+    with open(path, "r", encoding="utf-8") as file:
         html_content = file.read()
 
     soup = BeautifulSoup(html_content, "html.parser")
@@ -59,33 +59,15 @@ def parse_and_save_html(file_path, csv_path):
 
             if len(products) > 1:
                 print(f"Found {len(products)} products.")
+                i = 0
+                links = []
+                review_links = []
                 for product in products:
-                    if product.find("a", class_="WKTcLC"):
-                        product_name = product.find("a", class_="WKTcLC").text.strip()
-                    else:
-                        product_name = product.find("div", class_="KzDlHZ").text.strip()
-
-                    product_price = product.find("div", class_="Nx9bqj").text.strip()
-                    if product.find("div", class_="_3LWZlK"):
-                        product_rating = product.find(
-                            "div", class_="_3LWZlK"
-                        ).text.strip()
-                    elif product.find("div", class_="XQDdHH"):
-                        product_rating = product.find(
-                            "div", class_="XQDdHH"
-                        ).text.strip()
-                    else:
-                        product_rating = None
-
-                    if product.find("a", class_="WKTcLC"):
-                        product_link = product.find("a", class_="WKTcLC")["href"]
+                    i+=1
+                    if product.find("a", class_="VJA3rP"):
+                        product_link = product.find("a", class_="VJA3rP")["href"]
                     else:
                         product_link = product.find("a", class_="CGtC98")["href"]
-
-                    if product.find("img", class_="_53J4C-"):
-                        product_img = product.find("img", class_="_53J4C-")["src"]
-                    else:
-                        product_img = product.find("img", class_="DByuf4")["src"]
 
                     product_link = f"https://www.flipkart.com{product_link}".split("?")[
                         0
@@ -93,30 +75,43 @@ def parse_and_save_html(file_path, csv_path):
                     product_review_link = product_link.replace(
                         "/p/", "/product-reviews/"
                     )
-                    print(
+                    fetch_with_selenium(product_link,f'html/flipkart-product/{search}_{i}.html')
+                    links.append(product_link)
+                    review_links.append(product_review_link)
+                    if i==5:
+                        break
+                
+                for i in range(5):
+                    with open(f'html/flipkart-product/{search}_{i+1}.html', 'r', encoding='utf-8') as file:
+                        html_content = file.read()
+                        soup = BeautifulSoup(html_content, 'html.parser')
+                        main_content_div = soup.find('div', class_='YJG4Cf')
+                        print(main_content_div.find('div', class_='Nx9bqj').text.strip())
+                        product_name = main_content_div.find('span', class_='VU-ZEz').text.strip()
+                        product_price = main_content_div.find('div', class_='Nx9bqj').text.strip()
+                        product_img = main_content_div.find('img', class_='DByuf4 IZexXJ jLEJ7H')['src']
+                        product_rating = main_content_div.find('div', class_='XQDdHH').text.strip()
+                        product_review_link = review_links[i]
+                        print(
+                            {
+                                "Product Name": product_name,
+                                "Price": product_price,
+                                "Link": links[i],
+                                "Image": product_img,
+                                "Ratings": product_rating,
+                                "Product Reviews Link": product_review_link,
+                            })
+                        writer.writerow(
                         {
                             "Product Name": product_name,
                             "Price": product_price,
-                            "Link": f"https://www.flipkart.com{product_link}".split(
-                                "?"
-                            )[0],
+                            "Link": links[i],
                             "Image": product_img,
                             "Ratings": product_rating,
                             "Product Reviews Link": product_review_link,
                         }
                     )
-                    writer.writerow(
-                        {
-                            "Product Name": product_name,
-                            "Price": product_price,
-                            "Link": f"https://www.flipkart.com{product_link}".split(
-                                "?"
-                            )[0],
-                            "Image": product_img,
-                            "Ratings": product_rating,
-                            "Product Reviews Link": product_review_link,
-                        }
-                    )
+
 
                 print(f"Top 5 products saved to {csv_path}")
             else:
