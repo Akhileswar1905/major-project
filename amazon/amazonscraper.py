@@ -1,33 +1,37 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+from bs4 import BeautifulSoup
 from datetime import datetime
 import time
-from bs4 import BeautifulSoup
-import csv
 import os
+import csv
 
-
-# Function to fetch HTML with Selenium and save to a file
+# Function to fetch HTML with Selenium and save it to a file
 def fetch_with_selenium(url, path):
     chrome_options = Options()
     chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     driver.get(url)
-    time.sleep(5)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.TAG_NAME, "body"))
+    )  # Wait for the page to load
 
     html = driver.page_source
-
-    os.makedirs(os.path.dirname(path), exist_ok=True)  # Ensure the directory exists
+    os.makedirs(os.path.dirname(path), exist_ok=True)  # Ensure directory exists
     with open(path, "w", encoding="utf-8") as file:
         file.write(html)
 
     driver.quit()
-
 
 # Function to parse HTML and save data to a CSV file
 def parse_and_save_html(file_path, csv_path):
@@ -38,19 +42,15 @@ def parse_and_save_html(file_path, csv_path):
     main_content_div = soup.find("div", class_="s-search-results")
 
     if main_content_div:
-        products = main_content_div.find_all("div", class_="puisg-row")
+        products = main_content_div.find_all("div", class_="sg-col-inner")
         valid_products = [
             product for product in products if product.find("h2")
         ]  # Filter products with h2 tags
 
-        # Process only the top 5 products with h2 tags
         if valid_products:
             print(f"Found {len(valid_products)} valid products. Processing top 5...")
 
-            # Open CSV file for writing
-            os.makedirs(
-                os.path.dirname(csv_path), exist_ok=True
-            )  # Ensure directory exists
+            os.makedirs(os.path.dirname(csv_path), exist_ok=True)  # Ensure directory exists
             with open(csv_path, "w", newline="", encoding="utf-8") as csvfile:
                 fieldnames = [
                     "Product Name",
@@ -65,12 +65,16 @@ def parse_and_save_html(file_path, csv_path):
                 writer.writeheader()
 
                 for product in valid_products[:5]:  # Process top 5 products
-                    link = product.find("a", class_="a-link-normal")["href"]
+                    link_tag = product.find("a", class_="a-link-normal")
+                    if not link_tag:
+                        continue
+                    
+                    link = link_tag["href"]
                     product_link = f"https://www.amazon.in{link}"
                     product_name = product.find("h2").text.strip()
 
-                    img_holder = product.find("div", class_="s-product-image-container")
-                    product_img = img_holder.find("img")["src"] if img_holder else "N/A"
+                    img_holder = product.find("img")
+                    product_img = img_holder["src"] if img_holder else "N/A"
 
                     product_price = product.find("span", class_="a-offscreen")
                     product_price = (
@@ -82,22 +86,42 @@ def parse_and_save_html(file_path, csv_path):
                         product_ratings.text.strip() if product_ratings else "N/A"
                     )
 
-                    # Scrape the Reviews link for the product
-                    reviews_link = (
-                        f"http://www.amazon.in/product-reviews/{link.split('/')[3]}"
-                    )
+                    # Scrape reviews from the product reviews page
+                    try:
+                        product_id = link.split("/")[3]
+                        reviews_link = f"https://www.amazon.in/product-reviews/{product_id}"
+                        reviews_path = f"html/product-reviews/{product_id}.html"
+                        print(reviews_link)
+                        fetch_with_selenium(reviews_link, reviews_path)
 
-                    # Write the product data to the CSV
-                    # writer.writerow(
-                    #     {
-                    #         "Product Name": product_name,
-                    #         "Price": product_price,
-                    #         "Link": product_link,
-                    #         "Image": product_img,
-                    #         "Ratings": product_ratings,
-                    #         "Product Reviews Link": f"http://www.amazon.in/product-reviews/{link.split('/')[3]}",
-                    #     }
-                    # )
+                        # Parse the reviews page
+                        reviews = []
+                        with open(reviews_path, "r", encoding="utf-8") as review_file:
+                            reviews_html = review_file.read()
+                            review_soup = BeautifulSoup(reviews_html, "html.parser")
+                            review_div = review_soup.find('div', id="cm_cr-review_list")
+                            print(review_soup.find('div', class_='reviews-views'))
+                            review_spans = review_div.find_all(
+                                "span", class_="a-size-base review-text review-text-content"
+                            )
+                            reviews = [review.text.strip() for review in review_spans]
+                            print(reviews)
+                    except Exception as e:
+                        print(f"Error fetching reviews for {product_name}: {e}")
+                        reviews = []
+
+                    # Write product data to the CSV
+                    writer.writerow(
+                        {
+                            "Product Name": product_name,
+                            "Price": product_price,
+                            "Link": product_link,
+                            "Image": product_img,
+                            "Ratings": product_ratings,
+                            "Product Reviews Link": reviews_link,
+                            "Reviews": " | ".join(reviews),
+                        }
+                    )
 
             print(f"Top 5 products saved to {csv_path}")
         else:
@@ -105,14 +129,11 @@ def parse_and_save_html(file_path, csv_path):
     else:
         print("Div with class 's-search-results' not found.")
 
-
 # Main execution
 search = input("Enter the product name: ")
-
-url = f"https://www.amazon.in/search/s?k={search}"
+url = f"https://www.amazon.in/s?k={search}"
 path = f"html/{search}.html"
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
 csv_path = f"data/{search}_{timestamp}.csv"
 
 fetch_with_selenium(url, path)
